@@ -1,0 +1,8 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#000000" /> <!-- Bottom Nav Bar Rengi -->
+
+    <!-- Ortada FAB için boşluk -->
+    <path android:fillColor="#000000"
+        android:pathData="M0,0 L0,56 Q56,0 112,56 L112,0 L0,0 Z" />
+</shape>
