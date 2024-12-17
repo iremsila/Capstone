@@ -129,6 +129,13 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    // CameraX kütüphanesi
+    implementation("androidx.camera:camera-camera2:1.3.0")
+    implementation("androidx.camera:camera-lifecycle:1.3.0")
+    implementation("androidx.camera:camera-view:1.0.0-alpha08")
+
+    // ML Kit (OCR için)
+    implementation("com.google.mlkit:text-recognition:16.0.0")
 }
 
 kapt {

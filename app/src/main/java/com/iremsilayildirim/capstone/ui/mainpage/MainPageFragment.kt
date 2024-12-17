@@ -1,121 +1,99 @@
 package com.iremsilayildirim.capstone.ui.mainpage
 
-import android.Manifest
-import android.content.ContentValues
-import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
-import android.provider.MediaStore
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts.TakePicture
-import androidx.core.app.ActivityCompat
+import androidx.annotation.OptIn
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.Preview
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.iremsilayildirim.capstone.R
+import com.google.mlkit.vision.text.Text
+import androidx.camera.view.PreviewView
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 class MainPageFragment : Fragment() {
 
-    private lateinit var takePictureLauncher: ActivityResultLauncher<Uri>
-
-    companion object {
-        private const val CAMERA_PERMISSION_REQUEST_CODE = 100
-    }
+    private lateinit var previewView: PreviewView
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        return inflater.inflate(R.layout.fragment_main_page, container, false)
+        val view = inflater.inflate(R.layout.fragment_main_page, container, false)
+        previewView = view.findViewById(R.id.previewView)
+        startCamera() // Kamera başlatma işlemi
+        return view
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
 
-        val bottomNavView = view.findViewById<BottomNavigationView>(R.id.bottomNavigationView)
-        val fabCamera = view.findViewById<FloatingActionButton>(R.id.fab_camera)
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
 
-        bottomNavView.visibility = View.VISIBLE
-        bottomNavView.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.menu_home -> {
-                    // Home işlemi
-                    true
-                }
-                R.id.menu_profile -> {
-                    // Profile işlemi
-                    true
-                }
-                R.id.menu_settings -> {
-                    // Settings işlemi
-                    true
-                }
-                else -> false
+            val preview = Preview.Builder().build().apply {
+                setSurfaceProvider(previewView.surfaceProvider)
             }
-        }
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
-        // Kamera FAB'ı için onClickListener
-        fabCamera.setOnClickListener {
-            // Kamera izni kontrolü
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(
-                    requireActivity(),
-                    arrayOf(Manifest.permission.CAMERA),
-                    CAMERA_PERMISSION_REQUEST_CODE
+            try {
+                cameraProvider.unbindAll() // Önceki kamera işlemlerini temizle
+
+                val camera = cameraProvider.bindToLifecycle(
+                    this, cameraSelector, preview
                 )
-            } else {
-                openCamera() // İzin verilmişse kamerayı aç
-            }
-        }
 
-        // Kamera işlemi için launcher oluşturuluyor
-        takePictureLauncher = registerForActivityResult(TakePicture()) { isSuccess ->
-            if (isSuccess) {
-                Toast.makeText(requireContext(), "Fotoğraf çekildi", Toast.LENGTH_SHORT).show()
-                // Burada çekilen fotoğraf ile işlem yapabilirsiniz.
-            } else {
-                Toast.makeText(requireContext(), "Fotoğraf çekme başarısız", Toast.LENGTH_SHORT).show()
+                // Görüntü üzerinde analiz işlemi için ImageAnalysis ekleyebilirsiniz
+                val imageAnalysis = ImageAnalysis.Builder().build()
+                imageAnalysis.setAnalyzer(
+                    ContextCompat.getMainExecutor(requireContext()),
+                    { imageProxy ->
+                        processImageProxy(imageProxy) // Görüntü analizi
+                    }
+                )
+                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis)
+
+            } catch (e: Exception) {
+                Log.e("MainPageFragment", "Kamera başlatılamadı: ", e)
             }
+
+        }, ContextCompat.getMainExecutor(requireContext()))
+    }
+
+    // Görüntüyü analiz etme işlemi
+    @OptIn(ExperimentalGetImage::class)
+    private fun processImageProxy(imageProxy: ImageProxy) {
+        val mediaImage = imageProxy.image
+        if (mediaImage != null) {
+            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    handleRecognizedText(visionText) // Tanınan metni işleme
+                }
+                .addOnFailureListener { e ->
+                    Log.e("MainPageFragment", "Metin tanıma başarısız: $e")
+                }
+                .addOnCompleteListener {
+                    imageProxy.close() // ImageProxy'yi kapat
+                }
         }
     }
 
-    // Kamera işlemi için açma fonksiyonu
-    private fun openCamera() {
-        val cameraUri: Uri = createImageUri() // Fotoğrafı kaydetmek için URI oluşturuluyor
-        takePictureLauncher.launch(cameraUri) // Kamera başlatılıyor
-    }
-
-    // Fotoğraf için URI oluşturma metodu
-    private fun createImageUri(): Uri {
-        // Fotoğrafın kaydedileceği URI'yi buradan oluşturabilirsiniz
-        val contentResolver = requireContext().contentResolver
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "photo_${System.currentTimeMillis()}.jpg")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
-        }
-        return contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)!!
-    }
-
-    // İzin sonucu
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                openCamera() // İzin verildiyse kamerayı aç
-            } else {
-                Toast.makeText(requireContext(), "Kamera izni gereklidir", Toast.LENGTH_SHORT).show()
-            }
-        }
+    private fun handleRecognizedText(text: Text) {
+        val recognizedText = text.text
+        Log.d("MainPageFragment", "Tanınan metin: $recognizedText")
+        // Burada tanınan metni kullanabilirsiniz (örneğin ilacın adını burada gösterebilirsiniz)
     }
 }

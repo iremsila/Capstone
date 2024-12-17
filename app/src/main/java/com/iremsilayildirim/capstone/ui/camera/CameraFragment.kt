@@ -1,3 +1,5 @@
+package com.iremsilayildirim.capstone.ui.mainpage
+
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -9,7 +11,6 @@ import android.os.Bundle
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
-import android.widget.Button
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -19,7 +20,6 @@ import com.iremsilayildirim.capstone.R
 class CameraFragment : Fragment(R.layout.fragment_camera) {
 
     private lateinit var surfaceView: SurfaceView
-    private lateinit var startCameraButton: Button
     private var cameraDevice: CameraDevice? = null
     private var cameraCaptureSession: CameraCaptureSession? = null
 
@@ -35,7 +35,6 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
         super.onViewCreated(view, savedInstanceState)
 
         surfaceView = view.findViewById(R.id.surfaceView)
-        startCameraButton = view.findViewById(R.id.startCameraButton)
 
         // SurfaceView üzerine kamera görüntüsü almak için holder ayarlıyoruz
         val holder: SurfaceHolder = surfaceView.holder
@@ -56,15 +55,6 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
                 cameraDevice?.close()
             }
         })
-
-        // Kamera başlatma butonuna tıklama işlemi
-        startCameraButton.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                startCamera()
-            } else {
-                cameraPermissionRequest.launch(Manifest.permission.CAMERA)
-            }
-        }
     }
 
     private fun startCamera() {
