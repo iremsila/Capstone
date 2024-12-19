@@ -1,104 +1,112 @@
 package com.iremsilayildirim.capstone.ui.camera
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
-import android.hardware.camera2.CameraAccessException
-import android.hardware.camera2.CameraCaptureSession
-import android.hardware.camera2.CameraDevice
-import android.hardware.camera2.CameraManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
-import android.view.SurfaceHolder
-import android.view.SurfaceView
 import android.view.View
+import android.widget.Button
+import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
+import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.iremsilayildirim.capstone.R
+import com.iremsilayildirim.capstone.databinding.FragmentCameraBinding
 
 class CameraFragment : Fragment(R.layout.fragment_camera) {
 
-    private lateinit var surfaceView: SurfaceView
-    private var cameraDevice: CameraDevice? = null
-    private var cameraCaptureSession: CameraCaptureSession? = null
+    private var _binding: FragmentCameraBinding? = null
+    private val binding get() = _binding!!
 
+    private lateinit var previewView: PreviewView
+    private lateinit var recognizeTextButton: Button
+    private lateinit var ocrResultTextView: TextView  // Değişken adı doğru şekilde burada tanımlandı
+    private lateinit var loadingIndicator: ProgressBar
+
+    private var imageAnalysis: ImageAnalysis? = null
 
     private val cameraPermissionRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            view?.let { startCamera(it.findViewById(R.id.previewView)) }
+            startCamera()
         } else {
-            // İzin verilmediyse, kullanıcıya uyarı gösterebilirsiniz.
+            Log.e("CameraFragment", "Kamera izni verilmedi!")
         }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        surfaceView = view.findViewById(R.id.surfaceView)
-        val previewView = view.findViewById<PreviewView>(R.id.previewView) // Correct initialization
+        _binding = FragmentCameraBinding.bind(view)
 
-        // SurfaceView holder setup (if still needed)
-        val holder: SurfaceHolder = surfaceView.holder
-        holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) {
-                if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                    startCamera(view.findViewById(R.id.previewView)) // Pass previewView
-                } else {
-                    cameraPermissionRequest.launch(Manifest.permission.CAMERA)
-                }
-            }
-            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
+        previewView = binding.previewView
+        ocrResultTextView = binding.ocrResultTextView // Bu satırda doğru ad kullanılıyor
+        loadingIndicator = binding.loadingIndicator
+        recognizeTextButton = binding.recognizeTextButton
 
-            override fun surfaceDestroyed(holder: SurfaceHolder) {
-                cameraCaptureSession?.close()
-                cameraDevice?.close()
-            }
-        })
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            startCamera()
+        } else {
+            cameraPermissionRequest.launch(Manifest.permission.CAMERA)
+        }
+
+        recognizeTextButton.setOnClickListener {
+            analyzeCurrentFrame()
+        }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
     }
 
 
-    private fun startCamera(previewView: PreviewView) {
+    private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
-
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
-
             val preview = Preview.Builder().build().apply {
                 setSurfaceProvider(previewView.surfaceProvider)
             }
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+            imageAnalysis = ImageAnalysis.Builder().build().apply {
+                setAnalyzer(ContextCompat.getMainExecutor(requireContext())) { imageProxy ->
+                    // Şu anda otomatik tanıma yok, kullanıcı tetikleyince yapılacak
+                    imageProxy.close()
+                }
+            }
 
             try {
-                cameraProvider.unbindAll() // Clean up previous camera usage
-
-                val imageAnalysis = ImageAnalysis.Builder().build().apply {
-                    setAnalyzer(ContextCompat.getMainExecutor(requireContext())) { imageProxy ->
-                        processImageProxy(imageProxy) // Analyze image
-                    }
-                }
-
-                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis)
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(
+                    this,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    imageAnalysis
+                )
             } catch (e: Exception) {
-                Log.e("CameraFragment", "Failed to start camera: ", e)
+                Log.e("CameraFragment", "Kamera başlatılamadı", e)
             }
         }, ContextCompat.getMainExecutor(requireContext()))
     }
 
-    // Görüntüyü analiz etme işlemi
+    private fun analyzeCurrentFrame() {
+        imageAnalysis?.setAnalyzer(ContextCompat.getMainExecutor(requireContext())) { imageProxy ->
+            processImageProxy(imageProxy)
+        }
+    }
+
     @OptIn(ExperimentalGetImage::class)
     private fun processImageProxy(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image
@@ -106,28 +114,38 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
             val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
             val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
+            showLoading(true)
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
-                    handleRecognizedText(visionText) // Tanınan metni işleme
+                    showRecognizedText(visionText)
+                    // 3-5 saniye bekleyip, ardından main sayfaya yönlendirme
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        showLoading(false)
+                        navigateToMainPage(visionText)
+                    }, 3000)
                 }
                 .addOnFailureListener { e ->
-                    Log.e("MainPageFragment", "Metin tanıma başarısız: $e")
+                    Log.e("CameraFragment", "Metin tanıma başarısız: $e")
                 }
                 .addOnCompleteListener {
-                    imageProxy.close() // ImageProxy'yi kapat
+                    imageProxy.close()
                 }
+        } else {
+            imageProxy.close()
         }
     }
 
-    private fun handleRecognizedText(text: Text) {
-        val recognizedText = text.text
-        Log.d("MainPageFragment", "Tanınan metin: $recognizedText")
-        // Burada tanınan metni kullanabilirsiniz (örneğin ilacın adını burada gösterebilirsiniz)
+    private fun showRecognizedText(text: Text) {
+        ocrResultTextView.text = text.text // Burada ocrResultTextView doğru adla kullanılıyor
     }
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        cameraCaptureSession?.close()
-        cameraDevice?.close()
+    private fun showLoading(isLoading: Boolean) {
+        loadingIndicator.visibility = if (isLoading) View.VISIBLE else View.GONE
+    }
+
+    private fun navigateToMainPage(visionText: Text) {
+        // Ana sayfaya yönlendirme ve metni geçirme
+        val action = CameraFragmentDirections.actionCameraFragmentToMainPageFragment(visionText.text)
+        findNavController().navigate(action)
     }
 }

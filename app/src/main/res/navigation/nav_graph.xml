@@ -34,19 +34,26 @@
         android:name="com.iremsilayildirim.capstone.ui.mainpage.MainPageFragment"
         android:label="MainPageFragment"
         tools:layout="@layout/fragment_main_page">
-        <!-- Define actions if needed, for example, navigation to loginFragment -->
         <action
             android:id="@+id/action_registerFragment_to_loginFragment"
             app:destination="@id/LoginFragment" />
         <action
             android:id="@+id/action_mainPageFragment_to_cameraFragment"
             app:destination="@id/cameraFragment" />
+        <argument
+            android:name="recognizedText"
+            app:argType="string" >
+        </argument>
     </fragment>
     <fragment
         android:id="@+id/cameraFragment"
         android:name="com.iremsilayildirim.capstone.ui.camera.CameraFragment"
         android:label="fragment_camera"
-        tools:layout="@layout/fragment_camera" />
+        tools:layout="@layout/fragment_camera">
+        <action
+            android:id="@+id/action_cameraFragment_to_mainPageFragment"
+            app:destination="@id/mainPageFragment" />
+    </fragment>
 
 
 </navigation>

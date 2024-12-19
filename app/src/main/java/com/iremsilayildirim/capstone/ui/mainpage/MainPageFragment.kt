@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.camera.view.PreviewView
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
@@ -27,4 +28,17 @@ class MainPageFragment : Fragment() {
 
         return view
     }
+
+
+    private lateinit var recognizedTextView: TextView
+
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+            recognizedTextView = view.findViewById(R.id.recognizedTextView)
+
+            val recognizedText = arguments?.getString("recognizedText") // OCR metni
+            recognizedTextView.text = recognizedText
+        }
+
+
 }
