@@ -10,6 +10,8 @@
         android:name="com.iremsilayildirim.capstone.ui.login.LoginFragment"
         android:label="LoginFragment"
         tools:layout="@layout/fragment_login">
+        <action android:id="@+id/action_loginFragment_to_ApiResultFragment"
+            app:destination="@+id/ApiResultFragment" />
         <action
             android:id="@+id/action_loginFragment_to_registerFragment"
             app:destination="@id/registerFragment" />
@@ -29,6 +31,18 @@
             android:id="@+id/action_registerFragment_to_loginFragment"
             app:destination="@id/LoginFragment" />
     </fragment>
+
+
+
+    <fragment android:id="@+id/ApiResultFragment"
+        android:name="com.iremsilayildirim.capstone.ui.apiresult.ApiResultFragment"
+        android:label="ApiResultFragment"
+        tools:layout="@layout/fragment_api_result" />
+
+
+
+
+
     <fragment
         android:id="@+id/mainPageFragment"
         android:name="com.iremsilayildirim.capstone.ui.mainpage.MainPageFragment"
@@ -42,9 +56,10 @@
             app:destination="@id/cameraFragment" />
         <argument
             android:name="recognizedText"
-            app:argType="string" >
-        </argument>
+            app:argType="string"
+            android:defaultValue="No text recognized" />
     </fragment>
+
     <fragment
         android:id="@+id/cameraFragment"
         android:name="com.iremsilayildirim.capstone.ui.camera.CameraFragment"
@@ -54,6 +69,7 @@
             android:id="@+id/action_cameraFragment_to_mainPageFragment"
             app:destination="@id/mainPageFragment" />
     </fragment>
+
 
 
 </navigation>

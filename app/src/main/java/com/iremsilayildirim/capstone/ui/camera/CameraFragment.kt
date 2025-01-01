@@ -3,8 +3,6 @@ package com.iremsilayildirim.capstone.ui.camera
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.widget.Button
@@ -17,7 +15,6 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import androidx.navigation.fragment.findNavController
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
@@ -32,7 +29,7 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
 
     private lateinit var previewView: PreviewView
     private lateinit var recognizeTextButton: Button
-    private lateinit var ocrResultTextView: TextView  // Değişken adı doğru şekilde burada tanımlandı
+    private lateinit var ocrResultTextView: TextView
     private lateinit var loadingIndicator: ProgressBar
 
     private var imageAnalysis: ImageAnalysis? = null
@@ -41,7 +38,7 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
         if (granted) {
             startCamera()
         } else {
-            Log.e("CameraFragment", "Kamera izni verilmedi!")
+            Log.e("CameraFragment", "Camera permission denied!")
         }
     }
 
@@ -51,7 +48,7 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
         _binding = FragmentCameraBinding.bind(view)
 
         previewView = binding.previewView
-        ocrResultTextView = binding.ocrResultTextView // Bu satırda doğru ad kullanılıyor
+        ocrResultTextView = binding.ocrResultTextView
         loadingIndicator = binding.loadingIndicator
         recognizeTextButton = binding.recognizeTextButton
 
@@ -68,9 +65,9 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        imageAnalysis?.clearAnalyzer()
         _binding = null
     }
-
 
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
@@ -96,7 +93,7 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
                     imageAnalysis
                 )
             } catch (e: Exception) {
-                Log.e("CameraFragment", "Kamera başlatılamadı", e)
+                Log.e("CameraFragment", "Camera start failed", e)
             }
         }, ContextCompat.getMainExecutor(requireContext()))
     }
@@ -117,15 +114,12 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
             showLoading(true)
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
-                    showRecognizedText(visionText)
-                    // 3-5 saniye bekleyip, ardından main sayfaya yönlendirme
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        showLoading(false)
-                        navigateToMainPage(visionText)
-                    }, 3000)
+                    showRecognizedText(visionText) // OCR sonucu burada gösteriliyor
+                    showLoading(false)
                 }
                 .addOnFailureListener { e ->
-                    Log.e("CameraFragment", "Metin tanıma başarısız: $e")
+                    Log.e("CameraFragment", "Text recognition failed: $e")
+                    showLoading(false)
                 }
                 .addOnCompleteListener {
                     imageProxy.close()
@@ -136,16 +130,11 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
     }
 
     private fun showRecognizedText(text: Text) {
-        ocrResultTextView.text = text.text // Burada ocrResultTextView doğru adla kullanılıyor
+        val recognizedText = text.text.ifEmpty { "No text recognized" }
+        ocrResultTextView.text = recognizedText
     }
 
     private fun showLoading(isLoading: Boolean) {
         loadingIndicator.visibility = if (isLoading) View.VISIBLE else View.GONE
-    }
-
-    private fun navigateToMainPage(visionText: Text) {
-        // Ana sayfaya yönlendirme ve metni geçirme
-        val action = CameraFragmentDirections.actionCameraFragmentToMainPageFragment(visionText.text)
-        findNavController().navigate(action)
     }
 }

@@ -1,3 +1,4 @@
+import java.util.Properties
 plugins {
     id("org.jetbrains.kotlin.android")
     id("com.android.application")
@@ -22,8 +23,16 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-    }
+        val localProperties = Properties()
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            localPropertiesFile.inputStream().use {
+                localProperties.load(it)
+            }
+        }
+        buildConfigField("String", "API_KEY", "\"${localProperties["API_KEY"]}\"")
 
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -41,6 +50,7 @@ android {
         jvmTarget = "1.8"
     }
     buildFeatures {
+        buildConfig = true
         compose = true
         viewBinding = true
         dataBinding = true
