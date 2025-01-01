@@ -2,10 +2,13 @@ package com.iremsilayildirim.capstone.ui.camera
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,6 +16,7 @@ import androidx.annotation.OptIn
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.google.mlkit.vision.common.InputImage
@@ -21,6 +25,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.iremsilayildirim.capstone.R
 import com.iremsilayildirim.capstone.databinding.FragmentCameraBinding
+import java.io.File
 
 class CameraFragment : Fragment(R.layout.fragment_camera) {
 
@@ -31,8 +36,7 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
     private lateinit var recognizeTextButton: Button
     private lateinit var ocrResultTextView: TextView
     private lateinit var loadingIndicator: ProgressBar
-
-    private var imageAnalysis: ImageAnalysis? = null
+    private lateinit var imageCapture: ImageCapture
 
     private val cameraPermissionRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -59,13 +63,15 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
         }
 
         recognizeTextButton.setOnClickListener {
-            analyzeCurrentFrame()
+            captureImageAndAnalyze()
+            // Butonu gizle ve metin tanı işlemine başla
+            recognizeTextButton.visibility = View.GONE
+            recognizeTextButton.text = "Recognizing..."
         }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        imageAnalysis?.clearAnalyzer()
         _binding = null
     }
 
@@ -77,12 +83,7 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
                 setSurfaceProvider(previewView.surfaceProvider)
             }
 
-            imageAnalysis = ImageAnalysis.Builder().build().apply {
-                setAnalyzer(ContextCompat.getMainExecutor(requireContext())) { imageProxy ->
-                    // Şu anda otomatik tanıma yok, kullanıcı tetikleyince yapılacak
-                    imageProxy.close()
-                }
-            }
+            imageCapture = ImageCapture.Builder().build()
 
             try {
                 cameraProvider.unbindAll()
@@ -90,7 +91,7 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
                     this,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
-                    imageAnalysis
+                    imageCapture
                 )
             } catch (e: Exception) {
                 Log.e("CameraFragment", "Camera start failed", e)
@@ -98,40 +99,59 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
         }, ContextCompat.getMainExecutor(requireContext()))
     }
 
-    private fun analyzeCurrentFrame() {
-        imageAnalysis?.setAnalyzer(ContextCompat.getMainExecutor(requireContext())) { imageProxy ->
-            processImageProxy(imageProxy)
-        }
+    private fun captureImageAndAnalyze() {
+        val file = File(requireContext().externalCacheDir, "photo.jpg")
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(file).build()
+
+        imageCapture.takePicture(outputOptions, ContextCompat.getMainExecutor(requireContext()), object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                Log.d("CameraFragment", "Image saved to ${file.absolutePath}")
+                displayCapturedImage(file)
+                analyzeImage(file)
+            }
+
+            override fun onError(exception: ImageCaptureException) {
+                Log.e("CameraFragment", "Image capture failed: ${exception.message}")
+            }
+        })
+    }
+
+    private fun displayCapturedImage(file: File) {
+        // Fotoğrafı PreviewView içinde göstermek için bir ImageView ekleyebilirsiniz
+        val imageBitmap = BitmapFactory.decodeFile(file.absolutePath)
+        previewView.visibility = View.INVISIBLE  // PreviewView'ı gizleyelim
+        val capturedImageView = ImageView(requireContext())
+        capturedImageView.setImageBitmap(imageBitmap)
+        binding.root.addView(capturedImageView)
+
+        // Metin tanı butonunu ekranın üst kısmına taşıyalım
+        val params = recognizeTextButton.layoutParams as ConstraintLayout.LayoutParams
+        params.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+        recognizeTextButton.layoutParams = params
     }
 
     @OptIn(ExperimentalGetImage::class)
-    private fun processImageProxy(imageProxy: ImageProxy) {
-        val mediaImage = imageProxy.image
-        if (mediaImage != null) {
-            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    private fun analyzeImage(file: File) {
+        val image = InputImage.fromFilePath(requireContext(), Uri.fromFile(file))
 
-            showLoading(true)
-            recognizer.process(image)
-                .addOnSuccessListener { visionText ->
-                    showRecognizedText(visionText) // OCR sonucu burada gösteriliyor
-                    showLoading(false)
-                }
-                .addOnFailureListener { e ->
-                    Log.e("CameraFragment", "Text recognition failed: $e")
-                    showLoading(false)
-                }
-                .addOnCompleteListener {
-                    imageProxy.close()
-                }
-        } else {
-            imageProxy.close()
-        }
+        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        showLoading(true)
+
+        recognizer.process(image)
+            .addOnSuccessListener { visionText ->
+                showRecognizedText(visionText)
+                showLoading(false)
+            }
+            .addOnFailureListener { e ->
+                Log.e("CameraFragment", "Text recognition failed: $e")
+                showLoading(false)
+            }
     }
 
     private fun showRecognizedText(text: Text) {
         val recognizedText = text.text.ifEmpty { "No text recognized" }
         ocrResultTextView.text = recognizedText
+        binding.ocrResultCard.visibility = View.VISIBLE  // CardView görünür hale gelecek
     }
 
     private fun showLoading(isLoading: Boolean) {

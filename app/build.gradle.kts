@@ -117,7 +117,7 @@ dependencies {
     kapt("com.google.dagger:hilt-android-compiler:2.47") // Hilt compiler
 
     // CardView (for displaying content in a card style)
-    implementation("androidx.cardview:cardview:1.0.0")
+    implementation(libs.androidx.cardview)
 
     // Circle ImageView (for circular profile pictures)
     implementation("de.hdodenhof:circleimageview:3.1.0")
