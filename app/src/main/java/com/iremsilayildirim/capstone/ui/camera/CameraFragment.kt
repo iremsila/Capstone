@@ -25,6 +25,10 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.iremsilayildirim.capstone.R
 import com.iremsilayildirim.capstone.databinding.FragmentCameraBinding
+import com.iremsilayildirim.capstone.utils.DrugNameExtractor
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 import java.io.File
 
 class CameraFragment : Fragment(R.layout.fragment_camera) {
@@ -130,6 +134,44 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
         recognizeTextButton.layoutParams = params
     }
 
+    private fun fetchDrugInfo(drugName: String) {
+        val url = "https://api.fda.gov/drug/label.json?search=brand_name:\"$drugName\"&limit=1"
+        val client = OkHttpClient()
+        val request = Request.Builder()
+            .url(url)
+            .build()
+
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                Log.e("fetchDrugInfo", "Failed to fetch drug info: ${e.message}")
+            }
+
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                if (response.isSuccessful) {
+                    val responseData = response.body?.string()
+                    val jsonObject = JSONObject(responseData)
+                    val results = jsonObject.optJSONArray("results")
+                    if (results != null && results.length() > 0) {
+                        val drugDetails = results.getJSONObject(0)
+                        val drugDescription = drugDetails.optString("description", "No description available")
+                        Log.d("fetchDrugInfo", "Drug description: $drugDescription")
+
+                        // UI'da açıklamayı göstermek
+                        activity?.runOnUiThread {
+                            ocrResultTextView.text = drugDescription
+                        }
+
+                    } else {
+                        Log.d("fetchDrugInfo", "No results found for $drugName")
+                    }
+                } else {
+                    Log.e("fetchDrugInfo", "Failed to fetch data: ${response.message}")
+                }
+            }
+        })
+    }
+
+
     @OptIn(ExperimentalGetImage::class)
     private fun analyzeImage(file: File) {
         val image = InputImage.fromFilePath(requireContext(), Uri.fromFile(file))
@@ -139,6 +181,14 @@ class CameraFragment : Fragment(R.layout.fragment_camera) {
 
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
+                val recognizedText = visionText.text
+                val drugName = DrugNameExtractor.extractDrugName(recognizedText)
+                if (drugName != null) {
+                    // İlaç adı bulundu, OpenFDA API'ye gönderebilirsiniz
+                    fetchDrugInfo(drugName)
+                } else {
+                    Log.d("CameraFragment", "No drug name found.")
+                }
                 showRecognizedText(visionText)
                 showLoading(false)
             }
